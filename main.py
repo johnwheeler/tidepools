@@ -1,7 +1,6 @@
 import re
 import itertools
 from time import sleep
-from urllib.parse import urljoin
 
 import requests
 from tabulate import tabulate
@@ -20,11 +19,11 @@ LOCATIONS = [
 def main():
     for location in LOCATIONS:
         try:
-            rows = tide_forecast(location)
+            tide_data = tide_forecast(location)
             print("{:^45}".format(location), '\n')
-            print(tabulate(rows, headers=HEADERS), '\n')
-        except Exception as re:
-            print(re)
+            print(tabulate(tide_data, headers=HEADERS), '\n')
+        except requests.exceptions.HTTPError as e:
+            print(e)
 
         sleep(1) # be a good citizen
 
@@ -36,8 +35,12 @@ def tide_forecast(location):
     """
 
     url = url_for_location(location)
+    # The rows in the tide table contain one th followed by multiple td elements
+    # where the td elements are logically grouped together with the th.
+    #
+    # The th contains a date, and the td elements contain times, timezones, and tide
+    # levels, etc.
     rows = scrape(url, xpath='//table[@class="tide-table"]/tr')
-    header_indices = (i for i, row in enumerate(rows) if row[0].tag == 'th')
     partitions = partition(rows, lambda x: x[0].tag == 'th')
 
     results = list()
@@ -65,6 +68,7 @@ def scrape(url, *, xpath):
 
     return html.fromstring(resp.content).xpath(xpath)
 
+
 def url_for_location(location):
     """
     Convert a `location` into an endpoint where tide information can be scraped
@@ -83,7 +87,7 @@ def url_for_location(location):
 
 def partition(iterable, predicate):
     """
-    partitions an iterable into a list of iterables based on a boundary predicate
+    partitions `iterable` into a list of iterables based on the boundary `predicate`
     """
 
     a, b = itertools.tee(idx for idx, item in enumerate(iterable) if predicate(item))
